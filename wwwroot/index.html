@@ -1,0 +1,90 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>SignalR Chat</title>
+</head>
+<body>
+    <div id="loginBlock">
+        Введите логин:<br />
+        <input id="userName" type="text" />
+        <input id="userPassword" type="text" />
+        <input id="loginBtn" type="button" value="Войти" />
+    </div><br />
+
+    <div id="inputForm">
+        <input type="text" id="message" placeholder="Введите сообщение" />
+        <input type="text" id="receiver" placeholder="Введите получателя" />
+        <input type="button" id="sendBtn" disabled value="Отправить" />
+    </div>
+    <div id="chatroom"></div>
+
+    <script src="https://unpkg.com/@microsoft/signalr@3.1.0/dist/browser/signalr.min.js"></script>
+    <script>
+        let token;
+        const hubConnection = new signalR.HubConnectionBuilder()
+            .withUrl("/chat", { accessTokenFactory: () => token })
+            .build();
+        hubConnection.on("Receive", function (message, userName) {
+
+            // создаем элемент <b> для имени пользователя
+            let userNameElem = document.createElement("b");
+            userNameElem.appendChild(document.createTextNode(userName + ": "));
+
+            // создает элемент <p> для сообщения пользователя
+            let elem = document.createElement("p");
+            elem.appendChild(userNameElem);
+            elem.appendChild(document.createTextNode(message));
+
+            var firstElem = document.getElementById("chatroom").firstChild;
+            document.getElementById("chatroom").insertBefore(elem, firstElem);
+        });
+        hubConnection.on("Notify", function (message) {
+
+            // создает элемент <p> для сообщения пользователя
+            let elem = document.createElement("p");
+            elem.appendChild(document.createTextNode(message));
+
+            var firstElem = document.getElementById("chatroom").firstChild;
+            document.getElementById("chatroom").insertBefore(elem, firstElem);
+        });
+
+        // аутентификация
+        document.getElementById("loginBtn").addEventListener("click", function (e) {
+
+            var request = new XMLHttpRequest();
+            request.open("POST", "/token", true);
+            request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+            request.addEventListener("load", function () {
+                if (request.status < 400) { // если запрос успешный
+
+                    let data = JSON.parse(request.response);
+                    token = data.access_token;
+
+                    document.getElementById("sendBtn").disabled = false;
+
+                    hubConnection.start()       // начинаем соединение с хабом
+                        .catch(err => {
+                            console.error(err.toString());
+                            document.getElementById("loginBtn").disabled = true;
+                            document.getElementById("sendBtn").disabled = true;
+                        });
+                }
+                else {
+                    console.log("Status", request.status);
+                    console.log(request.responseText);
+                }
+            });
+            // отправляем запрос на аутентификацию
+            request.send("username=" + document.getElementById("userName").value +
+                "&password=" + document.getElementById("userPassword").value);
+        });
+        // отправка сообщения на сервер
+        document.getElementById("sendBtn").addEventListener("click", function (e) {
+            let message = document.getElementById("message").value;
+            let to = document.getElementById("receiver").value;
+            hubConnection.invoke("Send", message, to);
+        });
+    </script>
+</body>
+</html>
